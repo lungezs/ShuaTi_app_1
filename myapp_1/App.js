@@ -35,6 +35,12 @@ export default function App() {//题目数据
           <Text style={styles.optionText}>{option}</Text>{/* 显示选项文本*/}
         </TouchableOpacity>
       ))}
+      <TouchableOpacity
+        style={[styles.optionButton,{ marginTop: 20, backgroundColor: '#4CAF50' }]}//提交按钮样式
+        onPress={() => {}}
+      >
+        <Text style={[styles.optionText, { color: '#fff' }]}>下一题</Text>{/* 提交按钮文本 */}
+      </TouchableOpacity>
     </View>
   );
 }
