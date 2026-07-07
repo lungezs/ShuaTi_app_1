@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';//导入React库，并单独导入useState hook
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';//导入组件
 
-export default function App() {
+export default function App() {//题目数据
   const question = {
     title: 'React Native 是用什么语言开发的？',
     options: ['Java', 'Kotlin', 'JavaScript', 'Swift'],
     correct: 2,
   };
 
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(null);//定义[选项索引]，初始值为null
 
-  const handlePress = (index) => {
+  const handlePress = (index) => {//点击选项函数
     setSelected(index);
     if (index === question.correct) {
       Alert.alert('✅ 回答正确！！', '太棒了，继续加油！');
