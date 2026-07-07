@@ -11,55 +11,56 @@ export default function App() {//题目数据
   const [selected, setSelected] = useState(null);//定义[选项索引]，初始值为null
 
   const handlePress = (index) => {//点击选项函数
-    setSelected(index);
-    if (index === question.correct) {
+    setSelected(index);//赋值当前[选项索引]
+    if (index === question.correct) {//判断是否正确
       Alert.alert('✅ 回答正确！！', '太棒了，继续加油！');
     } else {
       Alert.alert('❌ 再想想', '正确答案是：' + question.options[question.correct]);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{question.title}</Text>
-      {question.options.map((option, index) => (
+  return (//UI布局
+    <View style={styles.container}>{/* 背景 */}
+      <Text style={styles.title}>{question.title}</Text>{/* 题目 */}
+      {/* 选项 */}
+      {question.options.map((option, index) => (//遍历选项数组，生成选项按钮 */}
         <TouchableOpacity
-          key={index}
+          key={index}//唯一标识=当前选项号
           style={[
-            styles.optionButton,
-            selected === index && { backgroundColor: '#d3d3d3' },
+            styles.optionButton,//选项按钮样式
+            selected === index && { backgroundColor: '#d3d3d3' },//如果当前选项被选中，则改变颜色
           ]}
-          onPress={() => handlePress(index)}
+          onPress={() => handlePress(index)}//点击选项时调用handlePress函数
         >
-          <Text style={styles.optionText}>{option}</Text>
+          <Text style={styles.optionText}>{option}</Text>{/* 显示选项文本*/}
         </TouchableOpacity>
       ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    padding: 20,
+const styles = StyleSheet.create({//样式表
+  container: {//背景样式
+    flex: 1,//占满整个屏幕
+    backgroundColor: '#f5f5f5',//背景颜色
+    justifyContent: 'center',//垂直居中
+    padding: 20,//内边距
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 30,
-    textAlign: 'center',
+  title: {//题目样式
+    fontSize: 22,//字体大小
+    fontWeight: 'bold',//字体加粗
+    marginBottom: 30,//下边距
+    textAlign: 'center',//文本居中
   },
-  optionButton: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+  optionButton: {//选项按钮样式
+    backgroundColor: '#fff',//背景颜色
+    padding: 15,//内边距
+    marginVertical: 8,//上下边距
+    borderRadius: 8,//圆角
+    borderWidth: 1,//边框宽度
+    borderColor: '#ddd',//边框颜色
   },
-  optionText: {
-    fontSize: 18,
+  optionText: {//选项文本样式
+    fontSize: 18,//字体大小
   },
 });
