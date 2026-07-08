@@ -2,28 +2,45 @@ import React, { useState } from 'react';//导入React库，并单独导入useSta
 import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';//导入组件
 
 export default function App() {//题目数据
-  const question = {
+  const questions = [{
     title: 'React Native 是用什么语言开发的？',
     options: ['Java', 'Kotlin', 'JavaScript', 'Swift'],
     correct: 2,
-  };
+  },
+  {
+    title: 'React 的官方状态管理钩子是？',
+      options: ['useState', 'useEffect', 'useRef', 'useContext'],
+      correct: 0,
+  },
+  ];
 
   const [selected, setSelected] = useState(null);//定义[选项索引]，初始值为null
+  const [currentIndex, setCurrentIndex] = useState(0); // 新增：记录当前显示第几题（0代表第一题）
 
   const handlePress = (index) => {//点击选项函数
     setSelected(index);//赋值当前[选项索引]
-    if (index === question.correct) {//判断是否正确
+    if (index === questions[currentIndex].correct) {//判断是否正确
       Alert.alert('✅ 回答正确！！', '太棒了，继续加油！');
     } else {
-      Alert.alert('❌ 再想想', '正确答案是：' + question.options[question.correct]);
+      Alert.alert('❌ 再想想', '正确答案是：' + questions[currentIndex].options[questions[currentIndex].correct]);
+    }
+  };
+  
+  const handleNext = () => {
+    // 如果当前不是最后一题（即 currentIndex 小于数组长度减 1）
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1); // 指针指向下一题
+      setSelected(null); // ！重要：清空上一题的选中状态，否则新题目刚出来会有灰色残留
+    } else {
+      Alert.alert('🎉 恭喜', '你已经做完了所有题目！');
     }
   };
 
   return (//UI布局
     <View style={styles.container}>{/* 背景 */}
-      <Text style={styles.title}>{question.title}</Text>{/* 题目 */}
+      <Text style={styles.title}>{questions[currentIndex].title}</Text>{/* 题目 */}
       {/* 选项 */}
-      {question.options.map((option, index) => (//遍历选项数组，生成选项按钮 */}
+      {questions[currentIndex].options.map((option, index) => (//遍历选项数组，生成选项按钮 */}
         <TouchableOpacity
           key={index}//唯一标识=当前选项号
           style={[
@@ -36,10 +53,10 @@ export default function App() {//题目数据
         </TouchableOpacity>
       ))}
       <TouchableOpacity
-        style={[styles.optionButton,{ marginTop: 20, backgroundColor: '#4CAF50' }]}//提交按钮样式
-        onPress={() => {}}
+        style={[styles.optionButton,{ marginTop: 20, backgroundColor: '#4CAF50' }]}//下一题按钮样式
+        onPress={handleNext}
       >
-        <Text style={[styles.optionText, { color: '#fff' }]}>下一题</Text>{/* 提交按钮文本 */}
+        <Text style={[styles.optionText, { color: '#fff' }]}>下一题</Text>{/* 下一题按钮文本 */}
       </TouchableOpacity>
     </View>
   );
