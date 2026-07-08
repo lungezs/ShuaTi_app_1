@@ -1,89 +1,76 @@
-import React, { useState } from 'react';//导入React库，并单独导入useState hook
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';//导入组件
+import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { useQuestionBank } from './hooks/useQuestionBank'; // 引入刚才写的管理员
 
-export default function App() {//题目数据
-  const questions = [{
-    title: 'React Native 是用什么语言开发的？',
-    options: ['Java', 'Kotlin', 'JavaScript', 'Swift'],
-    correct: 2,
-  },
-  {
-    title: 'React 的官方状态管理钩子是？',
-      options: ['useState', 'useEffect', 'useRef', 'useContext'],
-      correct: 0,
-  },
-  ];
+export default function App() {
+  // 从管理员那里拿数据和函数
+  const { questions, selected, currentIndex, importQuestions, handlePress, handleNext } = useQuestionBank();
 
-  const [selected, setSelected] = useState(null);//定义[选项索引]，初始值为null
-  const [currentIndex, setCurrentIndex] = useState(0); // 新增：记录当前显示第几题（0代表第一题）
+  // ---------- 如果没有题库，显示导入界面 ----------
+  if (questions.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>📂 请导入 Excel 题库</Text>
+        <TouchableOpacity style={[styles.optionButton, { backgroundColor: '#2196F3' }]} onPress={importQuestions}>
+          <Text style={[styles.optionText, { color: '#fff', textAlign: 'center' }]}>选择 Excel 文件</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-  const handlePress = (index) => {//点击选项函数
-    setSelected(index);//赋值当前[选项索引]
-    if (index === questions[currentIndex].correct) {//判断是否正确
-      Alert.alert('✅ 回答正确！！', '太棒了，继续加油！');
-    } else {
-      Alert.alert('❌ 再想想', '正确答案是：' + questions[currentIndex].options[questions[currentIndex].correct]);
-    }
-  };
-  
-  const handleNext = () => {
-    // 如果当前不是最后一题（即 currentIndex 小于数组长度减 1）
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(currentIndex + 1); // 指针指向下一题
-      setSelected(null); // ！重要：清空上一题的选中状态，否则新题目刚出来会有灰色残留
-    } else {
-      Alert.alert('🎉 恭喜', '你已经做完了所有题目！');
-    }
-  };
+  // ---------- 有题库，正常显示 ----------
+  const currentQ = questions[currentIndex];
 
-  return (//UI布局
-    <View style={styles.container}>{/* 背景 */}
-      <Text style={styles.title}>{questions[currentIndex].title}</Text>{/* 题目 */}
-      {/* 选项 */}
-      {questions[currentIndex].options.map((option, index) => (//遍历选项数组，生成选项按钮 */}
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>{currentIndex + 1}. {currentQ.title}</Text>
+
+      {currentQ.options.map((option, index) => (
         <TouchableOpacity
-          key={index}//唯一标识=当前选项号
+          key={index}
           style={[
-            styles.optionButton,//选项按钮样式
-            selected === index && { backgroundColor: '#d3d3d3' },//如果当前选项被选中，则改变颜色
+            styles.optionButton,
+            selected === index && { backgroundColor: '#d3d3d3' },
           ]}
-          onPress={() => handlePress(index)}//点击选项时调用handlePress函数
+          onPress={() => handlePress(index)}
         >
-          <Text style={styles.optionText}>{option}</Text>{/* 显示选项文本*/}
+          <Text style={styles.optionText}>{option}</Text>
         </TouchableOpacity>
       ))}
+
       <TouchableOpacity
-        style={[styles.optionButton,{ marginTop: 20, backgroundColor: '#4CAF50' }]}//下一题按钮样式
+        style={[styles.optionButton, { marginTop: 20, backgroundColor: '#4CAF50' }]}
         onPress={handleNext}
       >
-        <Text style={[styles.optionText, { color: '#fff' }]}>下一题</Text>{/* 下一题按钮文本 */}
+        <Text style={[styles.optionText, { color: '#fff', textAlign: 'center' }]}>下一题 ➜</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({//样式表
-  container: {//背景样式
-    flex: 1,//占满整个屏幕
-    backgroundColor: '#f5f5f5',//背景颜色
-    justifyContent: 'center',//垂直居中
-    padding: 20,//内边距
+// ---------- 样式表完全保持不变 ----------
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    padding: 20,
   },
-  title: {//题目样式
-    fontSize: 22,//字体大小
-    fontWeight: 'bold',//字体加粗
-    marginBottom: 30,//下边距
-    textAlign: 'center',//文本居中
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    textAlign: 'center',
   },
-  optionButton: {//选项按钮样式
-    backgroundColor: '#fff',//背景颜色
-    padding: 15,//内边距
-    marginVertical: 8,//上下边距
-    borderRadius: 8,//圆角
-    borderWidth: 1,//边框宽度
-    borderColor: '#ddd',//边框颜色
+  optionButton: {
+    backgroundColor: '#fff',
+    padding: 15,
+    marginVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  optionText: {//选项文本样式
-    fontSize: 18,//字体大小
+  optionText: {
+    fontSize: 18,
   },
 });
