@@ -1,62 +1,98 @@
-import { useState } from 'react';
-import { Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Alert, Modal, TextInput, View, Text, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parseExcelToQuestions } from '../utils/excelHelper';
 
+const STORAGE_KEY = 'all_question_banks';
+
 export const useQuestionBank = () => {
-  // 所有状态都搬到这里来了
-  const [questions, setQuestions] = useState([]);        // 题库（默认空数组）
-  const [selected, setSelected] = useState(null);        // 选中项
-  const [currentIndex, setCurrentIndex] = useState(0);   // 当前第几题
+  const [banks, setBanks] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [inputName, setInputName] = useState('');
 
-  // 导入题库（从 Excel 加载）
-  const importQuestions = async () => {
+  useEffect(() => {
+    const loadBanks = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        if (stored !== null) setBanks(JSON.parse(stored));
+      } catch (error) {
+        console.error('加载题库列表失败:', error);
+      }
+    };
+    loadBanks();
+  }, []);
+
+  const importNewBank = () => {
+    setInputName('');
+    setModalVisible(true);
+  };
+
+  const confirmImport = async () => {
+    setModalVisible(false);
+    const name = inputName.trim();
+    if (!name) {
+      Alert.alert('⚠️ 提示', '名称不能为空');
+      return;
+    }
+
     const data = await parseExcelToQuestions();
-    if (data && data.length > 0) {
-      setQuestions(data);
-      setCurrentIndex(0);
-      setSelected(null);
-      Alert.alert('✅ 成功', `导入了 ${data.length} 道题目！`);
-    } else if (data && data.length === 0) {
-      Alert.alert('⚠️ 提示', 'Excel 文件里没有有效数据。');
-    } else {
-      // data === null 表示用户取消了选择或解析失败
-      // 什么都不做，或者静静返回
+    if (!data || data.length === 0) {
+      Alert.alert('⚠️ 提示', 'Excel 数据无效或为空');
+      return;
+    }
+
+    const newBank = {
+      id: Date.now().toString(),
+      name: name,
+      questions: data,
+    };
+
+    try {
+      const currentBanks = await AsyncStorage.getItem(STORAGE_KEY);
+      const banksArray = currentBanks ? JSON.parse(currentBanks) : [];
+      const updatedBanks = [...banksArray, newBank];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBanks));
+      setBanks(updatedBanks);
+      Alert.alert('✅ 成功', `已导入“${name}” (${data.length} 道题)`);
+    } catch (error) {
+      console.error('保存失败:', error);
+      Alert.alert('❌ 错误', '保存失败，请重试');
     }
   };
 
-  // 点击选项
-  const handlePress = (index) => {
-    // 如果没有题目，直接返回
-    if (questions.length === 0) return;
-
-    setSelected(index);
-    const currentQ = questions[currentIndex];
-    if (index === currentQ.correct) {
-      Alert.alert('✅ 回答正确！！', '太棒了，继续加油！');
-    } else {
-      Alert.alert('❌ 再想想', '正确答案是：' + currentQ.options[currentQ.correct]);
-    }
+  // ✅ 删除题库函数（确认已定义）
+  const deleteBank = async (id) => {
+    Alert.alert(
+      '🗑️ 删除题库',
+      '确定要删除这个题库吗？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updated = banks.filter(b => b.id !== id);
+              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+              setBanks(updated);
+            } catch (error) {
+              console.error('删除失败:', error);
+            }
+          }
+        }
+      ]
+    );
   };
 
-  // 下一题
-  const handleNext = () => {
-    if (questions.length === 0) return;
-
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setSelected(null);
-    } else {
-      Alert.alert('🎉 恭喜', '你已经做完了所有题目！');
-    }
-  };
-
-  // 把外部需要用到的东西全部暴露出去
+  // ✅ 返回对象中一定要包含 deleteBank
   return {
-    questions,
-    selected,
-    currentIndex,
-    importQuestions,
-    handlePress,
-    handleNext,
+    banks,
+    importNewBank,
+    confirmImport,
+    modalVisible,
+    setModalVisible,
+    inputName,
+    setInputName,
+    deleteBank,   // 👈 必须要有这一行
   };
 };
