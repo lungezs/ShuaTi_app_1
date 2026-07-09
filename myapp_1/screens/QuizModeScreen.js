@@ -2,14 +2,14 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { styles } from '../styles/commonStyles';
 
-const QuizModeScreen = ({ bank, onBack, onStartOrder, onStartFavorite }) => {
+const QuizModeScreen = ({ bank, onBack, onStartOrder, onStartFavorite, onStartExam }) => {
   const { name, questions } = bank;
 
   const modes = [
     { id: 'order', label: '📝 顺序练习', color: '#4CAF50', action: onStartOrder },
     { id: 'favorite', label: '⭐ 收藏', color: '#FF9800', action: onStartFavorite },
     { id: 'wrong', label: '❌ 错题本', color: '#f44336' },
-    { id: 'exam', label: '📊 模拟考试', color: '#9C27B0' },
+    { id: 'exam', label: '📊 模拟考试', color: '#9C27B0', action: onStartExam },
   ];
 
   const handleModePress = (mode) => {

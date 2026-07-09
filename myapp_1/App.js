@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, FlatList, Modal, TextInput, Alert } from 
 import { useQuestionBank } from './hooks/useQuestionBank';
 import QuizScreen from './screens/QuizScreen';
 import QuizModeScreen from './screens/QuizModeScreen';
+import ExamSetupScreen from './screens/ExamSetupScreen';
+import ExamScreen from './screens/ExamScreen';
 import { styles } from './styles/commonStyles';
 
 export default function App() {
@@ -25,6 +27,13 @@ export default function App() {
   const [collectedIndices, setCollectedIndices] = useState([]);
   const [displayQuestions, setDisplayQuestions] = useState([]);
 
+  // 考试相关状态
+  const [showExamSetup, setShowExamSetup] = useState(false);
+  const [isExamMode, setIsExamMode] = useState(false);
+  const [examQuestions, setExamQuestions] = useState([]);
+  const [examBankName, setExamBankName] = useState('');
+
+  // 加载收藏
   useEffect(() => {
     const loadCollected = async () => {
       if (currentBank) {
@@ -35,6 +44,7 @@ export default function App() {
     loadCollected();
   }, [currentBank]);
 
+  // 构建显示题目
   useEffect(() => {
     if (!currentBank) {
       setDisplayQuestions([]);
@@ -58,6 +68,7 @@ export default function App() {
     return newCollected;
   };
 
+  // 模式启动函数
   const startOrder = () => {
     setIsFavoriteMode(false);
     setIsQuizMode(true);
@@ -72,11 +83,74 @@ export default function App() {
     setIsQuizMode(true);
   };
 
+  const startExam = () => {
+    setShowExamSetup(true);
+  };
+
   const backToMode = () => {
     setIsQuizMode(false);
     setIsFavoriteMode(false);
+    setShowExamSetup(false);
+    setIsExamMode(false);
+    setExamQuestions([]);
   };
 
+  // 考试开始：根据 plan 抽取题目，保留原始索引
+  const handleExamStart = (plan) => {
+    const allQuestions = currentBank.questions;
+    const selected = [];
+    Object.keys(plan).forEach(type => {
+      const count = plan[type];
+      // 保留原始索引
+      const pool = allQuestions.map((q, idx) => ({ ...q, originalIndex: idx })).filter(q => (q.type || '单选题') === type);
+      const shuffled = pool.sort(() => Math.random() - 0.5);
+      const picked = shuffled.slice(0, count);
+      selected.push(...picked);
+    });
+    // 打乱整体顺序
+    const finalQuestions = selected.sort(() => Math.random() - 0.5);
+    setExamQuestions(finalQuestions);
+    setExamBankName(currentBank.name);
+    setShowExamSetup(false);
+    setIsExamMode(true);
+  };
+
+  // 退出考试
+  const exitExam = () => {
+    setIsExamMode(false);
+    setExamQuestions([]);
+    backToMode(); // 返回模式选择
+  };
+
+  // ----- 页面路由 -----
+  // 考试界面
+  if (currentBank && isExamMode && examQuestions.length > 0) {
+    return (
+      <ExamScreen
+        questions={examQuestions}
+        bankName={examBankName}
+        onBack={exitExam}
+        collectedIndices={collectedIndices}
+        onToggleCollect={handleToggleCollect}
+      />
+    );
+  }
+
+  // 考试设置界面
+  if (currentBank && showExamSetup) {
+    return (
+      <ExamSetupScreen
+        bank={currentBank}
+        onBack={() => {
+          setShowExamSetup(false);
+          // 返回模式选择（currentBank 保留）
+        }}
+        onStart={handleExamStart}
+      />
+    );
+  }
+
+  // 刷题界面（顺序/收藏）
   if (currentBank && isQuizMode) {
     return (
       <QuizScreen
@@ -92,6 +166,7 @@ export default function App() {
     );
   }
 
+  // 模式选择界面
   if (currentBank) {
     return (
       <QuizModeScreen
@@ -100,9 +175,12 @@ export default function App() {
           setCurrentBank(null);
           setIsQuizMode(false);
           setIsFavoriteMode(false);
+          setShowExamSetup(false);
+          setIsExamMode(false);
         }}
         onStartOrder={startOrder}
         onStartFavorite={startFavorite}
+        onStartExam={startExam}
       />
     );
   }
@@ -135,6 +213,8 @@ export default function App() {
                   setCurrentBank(item);
                   setIsQuizMode(false);
                   setIsFavoriteMode(false);
+                  setShowExamSetup(false);
+                  setIsExamMode(false);
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

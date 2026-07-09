@@ -80,7 +80,7 @@ const QuizScreen = ({
     }
   };
 
-  // ---------- 重置收藏进度（仅在收藏模式） ----------
+  // 重置收藏进度
   const resetFavoriteProgress = async () => {
     Alert.alert(
       '🔄 重置进度',
@@ -97,7 +97,6 @@ const QuizScreen = ({
               setSelectedIndices([]);
               setShowResult(false);
               setIsCorrect(false);
-              // 重置到第一题
               setCurrentIndex(0);
               Alert.alert('✅ 已重置', '收藏模式下的所有题目进度已清空。');
             } catch (error) {
@@ -132,7 +131,7 @@ const QuizScreen = ({
     }
   };
 
-  // 多选题
+  // 多选题切换
   const handleMultiPress = (index) => {
     if (showResult) return;
     setSelectedIndices(prev => {
@@ -144,6 +143,7 @@ const QuizScreen = ({
     });
   };
 
+  // 提交多选题
   const handleSubmitMulti = () => {
     if (showResult) return;
     if (selectedIndices.length === 0) {
@@ -156,6 +156,7 @@ const QuizScreen = ({
     setShowResult(true);
     setIsCorrect(isCorrectResult);
     saveRecord(sorted, isCorrectResult);
+    // 多选无论对错都不自动跳转
   };
 
   // 切换题目
@@ -201,7 +202,7 @@ const QuizScreen = ({
     }
   };
 
-  // 选项样式
+  // ----- 选项样式（关键修改）-----
   const getOptionStyle = (index) => {
     if (!showResult) {
       if (selectedIndices.includes(index)) {
@@ -209,18 +210,28 @@ const QuizScreen = ({
       }
       return {};
     }
+
     const isInCorrect = currentQ.correct.includes(index);
     const isSelected = selectedIndices.includes(index);
 
     if (isMulti) {
-      if (isSelected && isInCorrect) {
-        return { backgroundColor: '#4CAF50' };
+      // 多选题专用逻辑
+      if (isCorrect) {
+        // 整题正确：选中的选项显示绿色
+        if (isSelected) {
+          return { backgroundColor: '#4CAF50' };
+        }
+        return {};
+      } else {
+        // 整题错误：所有选中的选项显示红色
+        if (isSelected) {
+          return { backgroundColor: '#f44336' };
+        }
+        // 未选中的选项保持白色（不显示正确答案）
+        return {};
       }
-      if (isSelected && !isInCorrect) {
-        return { backgroundColor: '#f44336' };
-      }
-      return {};
     } else {
+      // 单选/判断题
       if (isInCorrect) {
         return { backgroundColor: '#4CAF50' };
       }
@@ -231,7 +242,7 @@ const QuizScreen = ({
     }
   };
 
-  // 目录
+  // 目录渲染
   const renderCatalogItem = ({ item }) => {
     const idx = item - 1;
     const record = allRecords[idx];
@@ -281,7 +292,6 @@ const QuizScreen = ({
 
   return (
     <View style={styles.container}>
-      {/* 顶部导航：返回 + 重置按钮（仅收藏模式） + 收藏按钮 + 目录 */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <TouchableOpacity onPress={onBack}>
           <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回</Text>
@@ -306,24 +316,39 @@ const QuizScreen = ({
       <Text style={styles.title}>{bankName} - {currentIndex + 1}/{questions.length}</Text>
       <Text style={styles.title}>{currentQ.type}：{currentQ.title}</Text>
 
-      {currentQ.options.map((option, idx) => (
-        <TouchableOpacity
-          key={idx}
-          style={[styles.optionButton, getOptionStyle(idx)]}
-          onPress={() => {
-            if (isMulti) {
-              handleMultiPress(idx);
-            } else {
-              handleSinglePress(idx);
-            }
-          }}
-          disabled={showResult}
-        >
-          <Text style={styles.optionText}>
-            {String.fromCharCode(65 + idx)}. {option}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {currentQ.options.map((option, idx) => {
+        const optionStyle = getOptionStyle(idx);
+        // 如果是多选题且已作答，且是错误情况下的选中项，覆盖文字颜色为白色
+        let textColor = '#000';
+        if (showResult && isMulti && !isCorrect && selectedIndices.includes(idx)) {
+          textColor = '#fff';
+        }
+        if (showResult && isMulti && isCorrect && selectedIndices.includes(idx)) {
+          textColor = '#fff';
+        }
+        if (showResult && !isMulti && selectedIndices.includes(idx)) {
+          textColor = '#fff';
+        }
+
+        return (
+          <TouchableOpacity
+            key={idx}
+            style={[styles.optionButton, optionStyle]}
+            onPress={() => {
+              if (isMulti) {
+                handleMultiPress(idx);
+              } else {
+                handleSinglePress(idx);
+              }
+            }}
+            disabled={showResult}
+          >
+            <Text style={[styles.optionText, { color: textColor }]}>
+              {String.fromCharCode(65 + idx)}. {option}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
 
       {isMulti && !showResult && (
         <TouchableOpacity
@@ -332,6 +357,22 @@ const QuizScreen = ({
         >
           <Text style={[styles.optionText, { color: '#fff', textAlign: 'center' }]}>确认答案</Text>
         </TouchableOpacity>
+      )}
+
+      {showResult && (
+        <View style={{
+          marginTop: 15,
+          padding: 12,
+          backgroundColor: '#fff3e0',
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: '#ffb74d'
+        }}>
+          <Text style={{ fontWeight: 'bold', color: '#e65100' }}>正确答案：{correctLetters}</Text>
+          {currentQ.parse && currentQ.parse.trim() !== '' && (
+            <Text style={{ fontSize: 16, color: '#333', marginTop: 4 }}>解析：{currentQ.parse}</Text>
+          )}
+        </View>
       )}
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
@@ -352,22 +393,6 @@ const QuizScreen = ({
           </Text>
         </TouchableOpacity>
       </View>
-
-      {showResult && (
-        <View style={{
-          marginTop: 15,
-          padding: 12,
-          backgroundColor: '#fff3e0',
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: '#ffb74d'
-        }}>
-          <Text style={{ fontWeight: 'bold', color: '#e65100' }}>正确答案：{correctLetters}</Text>
-          {currentQ.parse && currentQ.parse.trim() !== '' && (
-            <Text style={{ fontSize: 16, color: '#333', marginTop: 4 }}>解析：{currentQ.parse}</Text>
-          )}
-        </View>
-      )}
 
       <Modal
         visible={showCatalog}
