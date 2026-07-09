@@ -1,3 +1,4 @@
+// screens/ExamScreen.js
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Alert, Modal, FlatList } from 'react-native';
 import { styles } from '../styles/commonStyles';
@@ -8,6 +9,7 @@ const ExamScreen = ({
   onBack,
   collectedIndices,
   onToggleCollect,
+  onExamSubmit, // 提交后回调，传递结果数组
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState(Array(questions.length).fill(null));
@@ -85,6 +87,11 @@ const ExamScreen = ({
 
     setResults(resultArray);
     setSubmitted(true);
+
+    // 调用父组件回调，传递结果数组
+    if (onExamSubmit) {
+      onExamSubmit(resultArray);
+    }
   };
 
   const handleRetry = () => {
@@ -140,7 +147,7 @@ const ExamScreen = ({
     );
   };
 
-  // 渲染选项（关键修改：多选题提交后颜色逻辑）
+  // 渲染选项
   const renderOptions = () => {
     return currentQ.options.map((opt, idx) => {
       let optionStyle = {};
@@ -151,9 +158,8 @@ const ExamScreen = ({
         const isUserSelected = isSelected(idx);
 
         if (isMulti) {
-          // ----- 多选题逻辑 -----
           if (isCorrect) {
-            // 整题正确：选中的选项（全部正确）显示绿色
+            // 整题正确：选中的选项显示绿色
             if (isUserSelected) {
               optionStyle = { backgroundColor: '#4CAF50' };
               textColor = '#fff';
@@ -164,10 +170,10 @@ const ExamScreen = ({
               optionStyle = { backgroundColor: '#f44336' };
               textColor = '#fff';
             }
-            // 未选中的选项保持白色（不显示正确答案）
+            // 未选中的选项保持白色，不显示正确答案
           }
         } else {
-          // ----- 单选/判断题逻辑（保持不变）-----
+          // 单选/判断题
           const isInCorrect = currentQ.correct.includes(idx);
           if (isCorrect) {
             if (isInCorrect) {
@@ -186,7 +192,6 @@ const ExamScreen = ({
           }
         }
       } else {
-        // 未提交时，选中显示灰色
         if (isSelected(idx)) {
           optionStyle = { backgroundColor: '#d3d3d3' };
         }
@@ -207,7 +212,6 @@ const ExamScreen = ({
     });
   };
 
-  // 正确答案字母串
   const correctLetters = currentQ.correct.map(i => String.fromCharCode(65 + i)).join('');
 
   // 结果显示

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parseExcelToQuestions } from '../utils/excelHelper';
 
 const STORAGE_KEY = 'all_question_banks';
+const WRONG_PREFIX = 'wrong_';
 
 export const useQuestionBank = () => {
   const [banks, setBanks] = useState([]);
@@ -83,7 +84,7 @@ export const useQuestionBank = () => {
     );
   };
 
-  // ---------- 新增：收藏相关 ----------
+  // ---------- 收藏 ----------
   const getCollected = async (bankId) => {
     try {
       const stored = await AsyncStorage.getItem(`collected_${bankId}`);
@@ -112,6 +113,54 @@ export const useQuestionBank = () => {
     }
   };
 
+  // ---------- 错题本 ----------
+  const getWrongQuestions = async (bankId) => {
+    try {
+      const stored = await AsyncStorage.getItem(WRONG_PREFIX + bankId);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('获取错题本失败:', error);
+      return [];
+    }
+  };
+
+  // 批量添加错题（传入原始索引数组）
+  const addWrongQuestions = async (bankId, indices) => {
+    if (!indices || indices.length === 0) return;
+    try {
+      const stored = await AsyncStorage.getItem(WRONG_PREFIX + bankId);
+      let wrong = stored ? JSON.parse(stored) : [];
+      const set = new Set(wrong);
+      indices.forEach(idx => set.add(idx));
+      const updated = Array.from(set).sort((a, b) => a - b);
+      await AsyncStorage.setItem(WRONG_PREFIX + bankId, JSON.stringify(updated));
+    } catch (error) {
+      console.error('添加错题失败:', error);
+    }
+  };
+
+  // 移除单个错题
+  const removeWrongQuestion = async (bankId, questionIndex) => {
+    try {
+      const stored = await AsyncStorage.getItem(WRONG_PREFIX + bankId);
+      if (!stored) return;
+      let wrong = JSON.parse(stored);
+      const updated = wrong.filter(i => i !== questionIndex);
+      await AsyncStorage.setItem(WRONG_PREFIX + bankId, JSON.stringify(updated));
+    } catch (error) {
+      console.error('移除错题失败:', error);
+    }
+  };
+
+  // 清空错题本（删除整个键）
+  const clearWrongQuestions = async (bankId) => {
+    try {
+      await AsyncStorage.removeItem(WRONG_PREFIX + bankId);
+    } catch (error) {
+      console.error('清空错题本失败:', error);
+    }
+  };
+
   return {
     banks,
     importNewBank,
@@ -123,5 +172,9 @@ export const useQuestionBank = () => {
     deleteBank,
     getCollected,
     toggleCollected,
+    getWrongQuestions,
+    addWrongQuestions,
+    removeWrongQuestion,
+    clearWrongQuestions,
   };
 };

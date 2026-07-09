@@ -10,8 +10,11 @@ const QuizScreen = ({
   bankName,
   bankId,
   isFavoriteMode,
+  isWrongMode = false,
   collectedIndices,
   onToggleCollect,
+  onRemoveWrong,
+  onAddWrong,          // 答错时回调，用于加入错题本
   onBack,
   mode = 'order',
 }) => {
@@ -80,11 +83,12 @@ const QuizScreen = ({
     }
   };
 
-  // 重置收藏进度
-  const resetFavoriteProgress = async () => {
+  // 重置进度（仅错题本或收藏模式）
+  const resetProgress = async () => {
+    const label = isWrongMode ? '错题本' : '收藏';
     Alert.alert(
-      '🔄 重置进度',
-      '确定要清除收藏模式下所有题目的做题记录吗？此操作不可撤销。',
+      `🔄 重置${label}进度`,
+      `确定要清除${label}模式下所有题目的做题记录吗？此操作不可撤销。`,
       [
         { text: '取消', style: 'cancel' },
         {
@@ -98,7 +102,7 @@ const QuizScreen = ({
               setShowResult(false);
               setIsCorrect(false);
               setCurrentIndex(0);
-              Alert.alert('✅ 已重置', '收藏模式下的所有题目进度已清空。');
+              Alert.alert('✅ 已重置', `${label}模式下的所有题目进度已清空。`);
             } catch (error) {
               console.error('重置失败:', error);
               Alert.alert('❌ 错误', '重置失败，请重试');
@@ -117,6 +121,11 @@ const QuizScreen = ({
     setShowResult(true);
     setIsCorrect(correct);
     saveRecord([index], correct);
+
+    // 答错时加入错题本
+    if (!correct && onAddWrong) {
+      onAddWrong(originalIndex);
+    }
 
     if (correct) {
       if (autoJumpTimer) clearTimeout(autoJumpTimer);
@@ -156,7 +165,11 @@ const QuizScreen = ({
     setShowResult(true);
     setIsCorrect(isCorrectResult);
     saveRecord(sorted, isCorrectResult);
-    // 多选无论对错都不自动跳转
+
+    // 答错时加入错题本
+    if (!isCorrectResult && onAddWrong) {
+      onAddWrong(originalIndex);
+    }
   };
 
   // 切换题目
@@ -202,7 +215,33 @@ const QuizScreen = ({
     }
   };
 
-  // ----- 选项样式（关键修改）-----
+  // 移出错题本
+  const handleRemoveWrong = () => {
+    Alert.alert(
+      '📕 移出错题本',
+      '确定要将此题移出错题本吗？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '移除',
+          style: 'destructive',
+          onPress: async () => {
+            await onRemoveWrong(originalIndex);
+            if (currentIndex < questions.length - 1) {
+              goToQuestion(currentIndex + 1);
+            } else if (currentIndex > 0) {
+              goToQuestion(currentIndex - 1);
+            } else {
+              Alert.alert('提示', '错题本已空，即将返回');
+              onBack();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // ----- 选项样式 -----
   const getOptionStyle = (index) => {
     if (!showResult) {
       if (selectedIndices.includes(index)) {
@@ -215,23 +254,18 @@ const QuizScreen = ({
     const isSelected = selectedIndices.includes(index);
 
     if (isMulti) {
-      // 多选题专用逻辑
       if (isCorrect) {
-        // 整题正确：选中的选项显示绿色
         if (isSelected) {
           return { backgroundColor: '#4CAF50' };
         }
         return {};
       } else {
-        // 整题错误：所有选中的选项显示红色
         if (isSelected) {
           return { backgroundColor: '#f44336' };
         }
-        // 未选中的选项保持白色（不显示正确答案）
         return {};
       }
     } else {
-      // 单选/判断题
       if (isInCorrect) {
         return { backgroundColor: '#4CAF50' };
       }
@@ -297,16 +331,23 @@ const QuizScreen = ({
           <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回</Text>
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {isFavoriteMode && (
-            <TouchableOpacity onPress={resetFavoriteProgress} style={{ marginRight: 12 }}>
+          {(isFavoriteMode || isWrongMode) && (
+            <TouchableOpacity onPress={resetProgress} style={{ marginRight: 12 }}>
               <Text style={{ fontSize: 20, color: '#f44336' }}>🔄</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={handleToggleCollect} style={{ marginRight: 15 }}>
-            <Text style={{ fontSize: 24, color: isCollected ? '#FFD700' : '#ccc' }}>
-              {isCollected ? '⭐' : '☆'}
-            </Text>
-          </TouchableOpacity>
+          {!isWrongMode && (
+            <TouchableOpacity onPress={handleToggleCollect} style={{ marginRight: 15 }}>
+              <Text style={{ fontSize: 24, color: isCollected ? '#FFD700' : '#ccc' }}>
+                {isCollected ? '⭐' : '☆'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {isWrongMode && (
+            <TouchableOpacity onPress={handleRemoveWrong} style={{ marginRight: 15 }}>
+              <Text style={{ fontSize: 20, color: '#f44336' }}>📕</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => setShowCatalog(true)}>
             <Text style={{ fontSize: 18, color: '#2196F3', fontWeight: 'bold' }}>📋 目录</Text>
           </TouchableOpacity>
@@ -318,18 +359,18 @@ const QuizScreen = ({
 
       {currentQ.options.map((option, idx) => {
         const optionStyle = getOptionStyle(idx);
-        // 如果是多选题且已作答，且是错误情况下的选中项，覆盖文字颜色为白色
         let textColor = '#000';
-        if (showResult && isMulti && !isCorrect && selectedIndices.includes(idx)) {
-          textColor = '#fff';
+        if (showResult) {
+          if (isMulti) {
+            if (selectedIndices.includes(idx)) {
+              textColor = '#fff';
+            }
+          } else {
+            if (selectedIndices.includes(idx)) {
+              textColor = '#fff';
+            }
+          }
         }
-        if (showResult && isMulti && isCorrect && selectedIndices.includes(idx)) {
-          textColor = '#fff';
-        }
-        if (showResult && !isMulti && selectedIndices.includes(idx)) {
-          textColor = '#fff';
-        }
-
         return (
           <TouchableOpacity
             key={idx}

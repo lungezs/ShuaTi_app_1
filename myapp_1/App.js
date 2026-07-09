@@ -19,12 +19,18 @@ export default function App() {
     deleteBank,
     getCollected,
     toggleCollected,
+    getWrongQuestions,
+    addWrongQuestions,
+    removeWrongQuestion,
+    clearWrongQuestions,
   } = useQuestionBank();
 
   const [currentBank, setCurrentBank] = useState(null);
   const [isQuizMode, setIsQuizMode] = useState(false);
   const [isFavoriteMode, setIsFavoriteMode] = useState(false);
+  const [isWrongMode, setIsWrongMode] = useState(false);
   const [collectedIndices, setCollectedIndices] = useState([]);
+  const [wrongIndices, setWrongIndices] = useState([]);
   const [displayQuestions, setDisplayQuestions] = useState([]);
 
   // 考试相关状态
@@ -33,15 +39,17 @@ export default function App() {
   const [examQuestions, setExamQuestions] = useState([]);
   const [examBankName, setExamBankName] = useState('');
 
-  // 加载收藏
+  // 加载收藏和错题本
   useEffect(() => {
-    const loadCollected = async () => {
+    const loadCollections = async () => {
       if (currentBank) {
-        const indices = await getCollected(currentBank.id);
-        setCollectedIndices(indices);
+        const collected = await getCollected(currentBank.id);
+        setCollectedIndices(collected);
+        const wrong = await getWrongQuestions(currentBank.id);
+        setWrongIndices(wrong);
       }
     };
-    loadCollected();
+    loadCollections();
   }, [currentBank]);
 
   // 构建显示题目
@@ -51,16 +59,20 @@ export default function App() {
       return;
     }
 
+    let filtered = [];
     if (isFavoriteMode) {
-      const filtered = currentBank.questions
+      filtered = currentBank.questions
         .map((q, idx) => ({ ...q, originalIndex: idx }))
         .filter((_, idx) => collectedIndices.includes(idx));
-      setDisplayQuestions(filtered);
+    } else if (isWrongMode) {
+      filtered = currentBank.questions
+        .map((q, idx) => ({ ...q, originalIndex: idx }))
+        .filter((_, idx) => wrongIndices.includes(idx));
     } else {
-      const all = currentBank.questions.map((q, idx) => ({ ...q, originalIndex: idx }));
-      setDisplayQuestions(all);
+      filtered = currentBank.questions.map((q, idx) => ({ ...q, originalIndex: idx }));
     }
-  }, [currentBank, isFavoriteMode, collectedIndices]);
+    setDisplayQuestions(filtered);
+  }, [currentBank, isFavoriteMode, isWrongMode, collectedIndices, wrongIndices]);
 
   const handleToggleCollect = async (originalIndex) => {
     const newCollected = await toggleCollected(currentBank.id, originalIndex);
@@ -68,9 +80,25 @@ export default function App() {
     return newCollected;
   };
 
+  const handleRemoveWrong = async (originalIndex) => {
+    await removeWrongQuestion(currentBank.id, originalIndex);
+    const updated = wrongIndices.filter(i => i !== originalIndex);
+    setWrongIndices(updated);
+  };
+
+  // 新增：处理错题添加
+  const handleAddWrong = async (originalIndex) => {
+    if (!wrongIndices.includes(originalIndex)) {
+      const newWrong = [...wrongIndices, originalIndex].sort((a, b) => a - b);
+      setWrongIndices(newWrong);
+      await addWrongQuestions(currentBank.id, [originalIndex]);
+    }
+  };
+
   // 模式启动函数
   const startOrder = () => {
     setIsFavoriteMode(false);
+    setIsWrongMode(false);
     setIsQuizMode(true);
   };
 
@@ -80,6 +108,17 @@ export default function App() {
       return;
     }
     setIsFavoriteMode(true);
+    setIsWrongMode(false);
+    setIsQuizMode(true);
+  };
+
+  const startWrong = () => {
+    if (wrongIndices.length === 0) {
+      Alert.alert('提示', '错题本为空，继续做题吧！');
+      return;
+    }
+    setIsWrongMode(true);
+    setIsFavoriteMode(false);
     setIsQuizMode(true);
   };
 
@@ -90,24 +129,23 @@ export default function App() {
   const backToMode = () => {
     setIsQuizMode(false);
     setIsFavoriteMode(false);
+    setIsWrongMode(false);
     setShowExamSetup(false);
     setIsExamMode(false);
     setExamQuestions([]);
   };
 
-  // 考试开始：根据 plan 抽取题目，保留原始索引
+  // 考试开始
   const handleExamStart = (plan) => {
     const allQuestions = currentBank.questions;
     const selected = [];
     Object.keys(plan).forEach(type => {
       const count = plan[type];
-      // 保留原始索引
       const pool = allQuestions.map((q, idx) => ({ ...q, originalIndex: idx })).filter(q => (q.type || '单选题') === type);
       const shuffled = pool.sort(() => Math.random() - 0.5);
       const picked = shuffled.slice(0, count);
       selected.push(...picked);
     });
-    // 打乱整体顺序
     const finalQuestions = selected.sort(() => Math.random() - 0.5);
     setExamQuestions(finalQuestions);
     setExamBankName(currentBank.name);
@@ -115,11 +153,32 @@ export default function App() {
     setIsExamMode(true);
   };
 
+  // 考试提交后收录错题
+  const handleExamSubmit = (results) => {
+    const wrongIndicesToAdd = [];
+    examQuestions.forEach((q, idx) => {
+      if (!results[idx]) {
+        const origIdx = q.originalIndex;
+        if (origIdx !== undefined) {
+          wrongIndicesToAdd.push(origIdx);
+        }
+      }
+    });
+    if (wrongIndicesToAdd.length > 0) {
+      addWrongQuestions(currentBank.id, wrongIndicesToAdd);
+      const newWrong = [...wrongIndices];
+      wrongIndicesToAdd.forEach(idx => {
+        if (!newWrong.includes(idx)) newWrong.push(idx);
+      });
+      setWrongIndices(newWrong.sort((a,b) => a-b));
+    }
+  };
+
   // 退出考试
   const exitExam = () => {
     setIsExamMode(false);
     setExamQuestions([]);
-    backToMode(); // 返回模式选择
+    backToMode();
   };
 
   // ----- 页面路由 -----
@@ -132,6 +191,7 @@ export default function App() {
         onBack={exitExam}
         collectedIndices={collectedIndices}
         onToggleCollect={handleToggleCollect}
+        onExamSubmit={handleExamSubmit}
       />
     );
   }
@@ -143,14 +203,13 @@ export default function App() {
         bank={currentBank}
         onBack={() => {
           setShowExamSetup(false);
-          // 返回模式选择（currentBank 保留）
         }}
         onStart={handleExamStart}
       />
     );
   }
 
-  // 刷题界面（顺序/收藏）
+  // 刷题界面（顺序/收藏/错题本）
   if (currentBank && isQuizMode) {
     return (
       <QuizScreen
@@ -158,10 +217,13 @@ export default function App() {
         bankName={currentBank.name}
         bankId={currentBank.id}
         isFavoriteMode={isFavoriteMode}
+        isWrongMode={isWrongMode}
         collectedIndices={collectedIndices}
         onToggleCollect={handleToggleCollect}
+        onRemoveWrong={handleRemoveWrong}
+        onAddWrong={handleAddWrong}
         onBack={backToMode}
-        mode={isFavoriteMode ? 'favorite' : 'order'}
+        mode={isFavoriteMode ? 'favorite' : (isWrongMode ? 'wrong' : 'order')}
       />
     );
   }
@@ -175,11 +237,13 @@ export default function App() {
           setCurrentBank(null);
           setIsQuizMode(false);
           setIsFavoriteMode(false);
+          setIsWrongMode(false);
           setShowExamSetup(false);
           setIsExamMode(false);
         }}
         onStartOrder={startOrder}
         onStartFavorite={startFavorite}
+        onStartWrong={startWrong}
         onStartExam={startExam}
       />
     );
@@ -213,6 +277,7 @@ export default function App() {
                   setCurrentBank(item);
                   setIsQuizMode(false);
                   setIsFavoriteMode(false);
+                  setIsWrongMode(false);
                   setShowExamSetup(false);
                   setIsExamMode(false);
                 }}
