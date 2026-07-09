@@ -1,65 +1,97 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, FlatList, Modal, TextInput, Alert } from 'react-native';
 import { useQuestionBank } from './hooks/useQuestionBank';
 import QuizScreen from './screens/QuizScreen';
+import QuizModeScreen from './screens/QuizModeScreen';
 import { styles } from './styles/commonStyles';
 
-// ---------- 模式选择界面 ----------
-const QuizModeScreen = ({ bank, onBack, onStartQuiz }) => {
-  const { name, questions } = bank;
-
-  const modes = [
-    { id: 'order', label: '📝 顺序练习', color: '#4CAF50' },
-    { id: 'favorite', label: '⭐ 收藏', color: '#FF9800' },
-    { id: 'wrong', label: '❌ 错题本', color: '#f44336' },
-    { id: 'exam', label: '📊 模拟考试', color: '#9C27B0' },
-  ];
-
-  const handleModePress = (modeId) => {
-    if (modeId === 'order') {
-      onStartQuiz();
-    } else {
-      Alert.alert('⏳ 开发中', '这个功能还在开发中，敬请期待！');
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      <TouchableOpacity onPress={onBack} style={{ alignSelf: 'flex-start', marginBottom: 10 }}>
-        <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回题库列表</Text>
-      </TouchableOpacity>
-
-      <Text style={[styles.title, { marginBottom: 5 }]}>{name}</Text>
-      <Text style={{ textAlign: 'center', color: '#666', marginBottom: 30 }}>
-        共 {questions.length} 道题
-      </Text>
-
-      {modes.map((mode) => (
-        <TouchableOpacity
-          key={mode.id}
-          style={[styles.modeButton, { backgroundColor: mode.color }]}
-          onPress={() => handleModePress(mode.id)}
-        >
-          <Text style={styles.modeButtonText}>{mode.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-};
-
-// ---------- 主 App ----------
 export default function App() {
-  const { banks, importNewBank, confirmImport, modalVisible, setModalVisible, inputName, setInputName, deleteBank } = useQuestionBank();
-  
+  const {
+    banks,
+    importNewBank,
+    confirmImport,
+    modalVisible,
+    setModalVisible,
+    inputName,
+    setInputName,
+    deleteBank,
+    getCollected,
+    toggleCollected,
+  } = useQuestionBank();
+
   const [currentBank, setCurrentBank] = useState(null);
   const [isQuizMode, setIsQuizMode] = useState(false);
+  const [isFavoriteMode, setIsFavoriteMode] = useState(false);
+  const [collectedIndices, setCollectedIndices] = useState([]);
+  const [displayQuestions, setDisplayQuestions] = useState([]);
 
-  // 刷题界面
+  useEffect(() => {
+    const loadCollected = async () => {
+      if (currentBank) {
+        const indices = await getCollected(currentBank.id);
+        setCollectedIndices(indices);
+      }
+    };
+    loadCollected();
+  }, [currentBank]);
+
+  useEffect(() => {
+    if (!currentBank) {
+      setDisplayQuestions([]);
+      return;
+    }
+
+    if (isFavoriteMode) {
+      const filtered = currentBank.questions
+        .map((q, idx) => ({ ...q, originalIndex: idx }))
+        .filter((_, idx) => collectedIndices.includes(idx));
+      setDisplayQuestions(filtered);
+    } else {
+      const all = currentBank.questions.map((q, idx) => ({ ...q, originalIndex: idx }));
+      setDisplayQuestions(all);
+    }
+  }, [currentBank, isFavoriteMode, collectedIndices]);
+
+  const handleToggleCollect = async (originalIndex) => {
+    const newCollected = await toggleCollected(currentBank.id, originalIndex);
+    setCollectedIndices(newCollected);
+    return newCollected;
+  };
+
+  const startOrder = () => {
+    setIsFavoriteMode(false);
+    setIsQuizMode(true);
+  };
+
+  const startFavorite = () => {
+    if (collectedIndices.length === 0) {
+      Alert.alert('提示', '还没有收藏任何题目，请先在顺序练习中收藏题目。');
+      return;
+    }
+    setIsFavoriteMode(true);
+    setIsQuizMode(true);
+  };
+
+  const backToMode = () => {
+    setIsQuizMode(false);
+    setIsFavoriteMode(false);
+  };
+
   if (currentBank && isQuizMode) {
-    return <QuizScreen bank={currentBank} onBack={() => setIsQuizMode(false)} />;
+    return (
+      <QuizScreen
+        questions={displayQuestions}
+        bankName={currentBank.name}
+        bankId={currentBank.id}
+        isFavoriteMode={isFavoriteMode}
+        collectedIndices={collectedIndices}
+        onToggleCollect={handleToggleCollect}
+        onBack={backToMode}
+        mode={isFavoriteMode ? 'favorite' : 'order'}
+      />
+    );
   }
 
-  // 模式选择界面
   if (currentBank) {
     return (
       <QuizModeScreen
@@ -67,8 +99,10 @@ export default function App() {
         onBack={() => {
           setCurrentBank(null);
           setIsQuizMode(false);
+          setIsFavoriteMode(false);
         }}
-        onStartQuiz={() => setIsQuizMode(true)}
+        onStartOrder={startOrder}
+        onStartFavorite={startFavorite}
       />
     );
   }
@@ -100,6 +134,7 @@ export default function App() {
                 onPress={() => {
                   setCurrentBank(item);
                   setIsQuizMode(false);
+                  setIsFavoriteMode(false);
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -119,7 +154,6 @@ export default function App() {
         />
       )}
 
-      {/* Modal 输入弹窗 */}
       <Modal
         visible={modalVisible}
         transparent={true}

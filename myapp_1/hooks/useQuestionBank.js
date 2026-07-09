@@ -60,7 +60,6 @@ export const useQuestionBank = () => {
     }
   };
 
-  // ✅ 删除题库函数（确认已定义）
   const deleteBank = async (id) => {
     Alert.alert(
       '🗑️ 删除题库',
@@ -84,7 +83,35 @@ export const useQuestionBank = () => {
     );
   };
 
-  // ✅ 返回对象中一定要包含 deleteBank
+  // ---------- 新增：收藏相关 ----------
+  const getCollected = async (bankId) => {
+    try {
+      const stored = await AsyncStorage.getItem(`collected_${bankId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('获取收藏失败:', error);
+      return [];
+    }
+  };
+
+  const toggleCollected = async (bankId, questionIndex) => {
+    try {
+      const stored = await AsyncStorage.getItem(`collected_${bankId}`);
+      let collected = stored ? JSON.parse(stored) : [];
+      if (collected.includes(questionIndex)) {
+        collected = collected.filter(i => i !== questionIndex);
+      } else {
+        collected.push(questionIndex);
+        collected.sort((a, b) => a - b);
+      }
+      await AsyncStorage.setItem(`collected_${bankId}`, JSON.stringify(collected));
+      return collected;
+    } catch (error) {
+      console.error('切换收藏失败:', error);
+      return [];
+    }
+  };
+
   return {
     banks,
     importNewBank,
@@ -93,6 +120,8 @@ export const useQuestionBank = () => {
     setModalVisible,
     inputName,
     setInputName,
-    deleteBank,   // 👈 必须要有这一行
+    deleteBank,
+    getCollected,
+    toggleCollected,
   };
 };

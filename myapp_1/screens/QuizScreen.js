@@ -5,21 +5,31 @@ import { styles } from '../styles/commonStyles';
 
 const RECORD_KEY_PREFIX = 'quiz_record_';
 
-const QuizScreen = ({ bank, onBack }) => {
-  const { questions, name, id } = bank;
+const QuizScreen = ({
+  questions,
+  bankName,
+  bankId,
+  isFavoriteMode,
+  collectedIndices,
+  onToggleCollect,
+  onBack,
+  mode = 'order',
+}) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedIndices, setSelectedIndices] = useState([]);
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
-  const [selectedIndices, setSelectedIndices] = useState([]);
   const [showCatalog, setShowCatalog] = useState(false);
   const [allRecords, setAllRecords] = useState({});
-  const [autoJumpTimer, setAutoJumpTimer] = useState(null); // 用于存储定时器
+  const [autoJumpTimer, setAutoJumpTimer] = useState(null);
 
   const currentQ = questions[currentIndex];
-  const recordKey = RECORD_KEY_PREFIX + id;
-  const isMulti = currentQ.type === '多选题';
+  const recordKey = `${RECORD_KEY_PREFIX}${bankId}_${mode}`;
+  const isMulti = currentQ?.type === '多选题' || false;
+  const originalIndex = currentQ?.originalIndex ?? currentIndex;
+  const isCollected = collectedIndices.includes(originalIndex);
 
-  // 加载记录
+  // 加载做题记录
   useEffect(() => {
     const loadRecords = async () => {
       try {
@@ -49,7 +59,6 @@ const QuizScreen = ({ bank, onBack }) => {
     };
     loadRecords();
 
-    // 清理定时器（组件卸载或切换题目时）
     return () => {
       if (autoJumpTimer) clearTimeout(autoJumpTimer);
     };
@@ -71,7 +80,37 @@ const QuizScreen = ({ bank, onBack }) => {
     }
   };
 
-  // ---------- 单选/判断题点击 ----------
+  // ---------- 重置收藏进度（仅在收藏模式） ----------
+  const resetFavoriteProgress = async () => {
+    Alert.alert(
+      '🔄 重置进度',
+      '确定要清除收藏模式下所有题目的做题记录吗？此操作不可撤销。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定重置',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(recordKey);
+              setAllRecords({});
+              setSelectedIndices([]);
+              setShowResult(false);
+              setIsCorrect(false);
+              // 重置到第一题
+              setCurrentIndex(0);
+              Alert.alert('✅ 已重置', '收藏模式下的所有题目进度已清空。');
+            } catch (error) {
+              console.error('重置失败:', error);
+              Alert.alert('❌ 错误', '重置失败，请重试');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // 单选/判断题
   const handleSinglePress = (index) => {
     if (showResult) return;
     const correct = currentQ.correct.includes(index);
@@ -80,12 +119,9 @@ const QuizScreen = ({ bank, onBack }) => {
     setIsCorrect(correct);
     saveRecord([index], correct);
 
-    // 如果答对了，自动跳转下一题（延迟500ms让用户看到绿色反馈）
     if (correct) {
-      // 清除之前的定时器（避免重复）
       if (autoJumpTimer) clearTimeout(autoJumpTimer);
       const timer = setTimeout(() => {
-        // 检查是否还有下一题
         if (currentIndex < questions.length - 1) {
           goToQuestion(currentIndex + 1);
         } else {
@@ -96,7 +132,7 @@ const QuizScreen = ({ bank, onBack }) => {
     }
   };
 
-  // ---------- 多选题点击切换 ----------
+  // 多选题
   const handleMultiPress = (index) => {
     if (showResult) return;
     setSelectedIndices(prev => {
@@ -108,7 +144,6 @@ const QuizScreen = ({ bank, onBack }) => {
     });
   };
 
-  // ---------- 提交多选题 ----------
   const handleSubmitMulti = () => {
     if (showResult) return;
     if (selectedIndices.length === 0) {
@@ -121,13 +156,11 @@ const QuizScreen = ({ bank, onBack }) => {
     setShowResult(true);
     setIsCorrect(isCorrectResult);
     saveRecord(sorted, isCorrectResult);
-    // 多选无论对错都不自动跳转，用户需要手动点击“下一题”
   };
 
-  // ---------- 切换题目（通用） ----------
+  // 切换题目
   const goToQuestion = (newIndex) => {
     if (newIndex < 0 || newIndex >= questions.length) return;
-    // 清除定时器，防止在跳转过程中触发
     if (autoJumpTimer) {
       clearTimeout(autoJumpTimer);
       setAutoJumpTimer(null);
@@ -153,7 +186,22 @@ const QuizScreen = ({ bank, onBack }) => {
     }
   };
 
-  // ---------- 获取选项样式 ----------
+  // 切换收藏
+  const handleToggleCollect = async () => {
+    const newCollected = await onToggleCollect(originalIndex);
+    if (isFavoriteMode && !newCollected.includes(originalIndex)) {
+      if (currentIndex < questions.length - 1) {
+        goToQuestion(currentIndex + 1);
+      } else if (currentIndex > 0) {
+        goToQuestion(currentIndex - 1);
+      } else {
+        Alert.alert('提示', '已取消收藏，当前列表为空');
+        onBack();
+      }
+    }
+  };
+
+  // 选项样式
   const getOptionStyle = (index) => {
     if (!showResult) {
       if (selectedIndices.includes(index)) {
@@ -173,7 +221,6 @@ const QuizScreen = ({ bank, onBack }) => {
       }
       return {};
     } else {
-      // 单选/判断
       if (isInCorrect) {
         return { backgroundColor: '#4CAF50' };
       }
@@ -184,7 +231,7 @@ const QuizScreen = ({ bank, onBack }) => {
     }
   };
 
-  // 渲染目录项
+  // 目录
   const renderCatalogItem = ({ item }) => {
     const idx = item - 1;
     const record = allRecords[idx];
@@ -219,26 +266,45 @@ const QuizScreen = ({ bank, onBack }) => {
     );
   };
 
-  // 正确答案字母串
+  if (!currentQ) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>没有题目可显示</Text>
+        <TouchableOpacity onPress={onBack} style={[styles.optionButton, { marginTop: 20 }]}>
+          <Text style={styles.optionText}>返回</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const correctLetters = currentQ.correct.map(i => String.fromCharCode(65 + i)).join('');
 
-  // ---------- 主界面 ----------
   return (
     <View style={styles.container}>
-      {/* 顶部导航 */}
+      {/* 顶部导航：返回 + 重置按钮（仅收藏模式） + 收藏按钮 + 目录 */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <TouchableOpacity onPress={onBack}>
           <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowCatalog(true)}>
-          <Text style={{ fontSize: 18, color: '#2196F3', fontWeight: 'bold' }}>📋 目录</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isFavoriteMode && (
+            <TouchableOpacity onPress={resetFavoriteProgress} style={{ marginRight: 12 }}>
+              <Text style={{ fontSize: 20, color: '#f44336' }}>🔄</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleToggleCollect} style={{ marginRight: 15 }}>
+            <Text style={{ fontSize: 24, color: isCollected ? '#FFD700' : '#ccc' }}>
+              {isCollected ? '⭐' : '☆'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowCatalog(true)}>
+            <Text style={{ fontSize: 18, color: '#2196F3', fontWeight: 'bold' }}>📋 目录</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={styles.title}>{name} - {currentIndex + 1}/{questions.length}</Text>
-      <Text style={styles.title}>
-        {currentQ.type}：{currentQ.title}
-      </Text>
+      <Text style={styles.title}>{bankName} - {currentIndex + 1}/{questions.length}</Text>
+      <Text style={styles.title}>{currentQ.type}：{currentQ.title}</Text>
 
       {currentQ.options.map((option, idx) => (
         <TouchableOpacity
@@ -259,7 +325,6 @@ const QuizScreen = ({ bank, onBack }) => {
         </TouchableOpacity>
       ))}
 
-      {/* 多选题提交按钮 */}
       {isMulti && !showResult && (
         <TouchableOpacity
           style={[styles.optionButton, { marginTop: 10, backgroundColor: '#2196F3' }]}
@@ -269,7 +334,6 @@ const QuizScreen = ({ bank, onBack }) => {
         </TouchableOpacity>
       )}
 
-      {/* 上一题/下一题 */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
         <TouchableOpacity
           style={[styles.optionButton, { flex: 1, marginRight: 8, backgroundColor: currentIndex > 0 ? '#2196F3' : '#ccc' }]}
@@ -289,7 +353,6 @@ const QuizScreen = ({ bank, onBack }) => {
         </TouchableOpacity>
       </View>
 
-      {/* 解析 + 正确答案 */}
       {showResult && (
         <View style={{
           marginTop: 15,
@@ -306,7 +369,6 @@ const QuizScreen = ({ bank, onBack }) => {
         </View>
       )}
 
-      {/* 目录弹窗 */}
       <Modal
         visible={showCatalog}
         transparent={true}
