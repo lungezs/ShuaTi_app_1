@@ -1,77 +1,142 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/commonStyles';
 
-// 存储记录的前缀，用于区分不同题库
 const RECORD_KEY_PREFIX = 'quiz_record_';
 
 const QuizScreen = ({ bank, onBack }) => {
   const { questions, name, id } = bank;
-  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedIndices, setSelectedIndices] = useState([]);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [allRecords, setAllRecords] = useState({});
+  const [autoJumpTimer, setAutoJumpTimer] = useState(null); // 用于存储定时器
 
   const currentQ = questions[currentIndex];
-  const recordKey = RECORD_KEY_PREFIX + id; // 例如 "quiz_record_1234567890"
+  const recordKey = RECORD_KEY_PREFIX + id;
+  const isMulti = currentQ.type === '多选题';
 
-  // ---------- 加载本地记录 ----------
+  // 加载记录
   useEffect(() => {
     const loadRecords = async () => {
       try {
         const stored = await AsyncStorage.getItem(recordKey);
         if (stored !== null) {
           const records = JSON.parse(stored);
-          // 恢复当前题目的状态（如果有记录）
+          setAllRecords(records);
           const record = records[currentIndex];
           if (record) {
-            setSelectedIndex(record.selectedIndex);
+            setSelectedIndices(record.selectedIndices || []);
             setShowResult(true);
             setIsCorrect(record.correct);
+          } else {
+            setSelectedIndices([]);
+            setShowResult(false);
+            setIsCorrect(false);
           }
+        } else {
+          setAllRecords({});
+          setSelectedIndices([]);
+          setShowResult(false);
+          setIsCorrect(false);
         }
       } catch (error) {
         console.error('加载做题记录失败:', error);
       }
     };
     loadRecords();
+
+    // 清理定时器（组件卸载或切换题目时）
+    return () => {
+      if (autoJumpTimer) clearTimeout(autoJumpTimer);
+    };
   }, [currentIndex, recordKey]);
 
-  // ---------- 保存当前题目记录 ----------
-  const saveRecord = async (index, correct) => {
+  // 保存记录
+  const saveRecord = async (selected, correct) => {
     try {
       const stored = await AsyncStorage.getItem(recordKey);
       const records = stored ? JSON.parse(stored) : {};
       records[currentIndex] = {
-        selectedIndex: index,
+        selectedIndices: selected,
         correct: correct,
       };
       await AsyncStorage.setItem(recordKey, JSON.stringify(records));
+      setAllRecords(records);
     } catch (error) {
       console.error('保存做题记录失败:', error);
     }
   };
 
-  // ---------- 点击选项 ----------
-  const handlePress = (index) => {
+  // ---------- 单选/判断题点击 ----------
+  const handleSinglePress = (index) => {
     if (showResult) return;
-    const correct = index === currentQ.correct;
-    setSelectedIndex(index);
+    const correct = currentQ.correct.includes(index);
+    setSelectedIndices([index]);
     setShowResult(true);
     setIsCorrect(correct);
-    // 保存记录
-    saveRecord(index, correct);
+    saveRecord([index], correct);
+
+    // 如果答对了，自动跳转下一题（延迟500ms让用户看到绿色反馈）
+    if (correct) {
+      // 清除之前的定时器（避免重复）
+      if (autoJumpTimer) clearTimeout(autoJumpTimer);
+      const timer = setTimeout(() => {
+        // 检查是否还有下一题
+        if (currentIndex < questions.length - 1) {
+          goToQuestion(currentIndex + 1);
+        } else {
+          Alert.alert('🎉 恭喜', '你已完成这个题库！');
+        }
+      }, 500);
+      setAutoJumpTimer(timer);
+    }
   };
 
-  // ---------- 切换题目时重置当前题目的状态（但保留已保存记录） ----------
+  // ---------- 多选题点击切换 ----------
+  const handleMultiPress = (index) => {
+    if (showResult) return;
+    setSelectedIndices(prev => {
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      } else {
+        return [...prev, index];
+      }
+    });
+  };
+
+  // ---------- 提交多选题 ----------
+  const handleSubmitMulti = () => {
+    if (showResult) return;
+    if (selectedIndices.length === 0) {
+      Alert.alert('提示', '请至少选择一个选项');
+      return;
+    }
+    const sorted = [...selectedIndices].sort();
+    const correctSorted = [...currentQ.correct].sort();
+    const isCorrectResult = sorted.length === correctSorted.length && sorted.every((v, i) => v === correctSorted[i]);
+    setShowResult(true);
+    setIsCorrect(isCorrectResult);
+    saveRecord(sorted, isCorrectResult);
+    // 多选无论对错都不自动跳转，用户需要手动点击“下一题”
+  };
+
+  // ---------- 切换题目（通用） ----------
   const goToQuestion = (newIndex) => {
     if (newIndex < 0 || newIndex >= questions.length) return;
+    // 清除定时器，防止在跳转过程中触发
+    if (autoJumpTimer) {
+      clearTimeout(autoJumpTimer);
+      setAutoJumpTimer(null);
+    }
     setCurrentIndex(newIndex);
-    // 重置当前题目的显示状态，等待 useEffect 加载记录
-    setSelectedIndex(null);
+    setSelectedIndices([]);
     setShowResult(false);
     setIsCorrect(false);
+    setShowCatalog(false);
   };
 
   const handleNext = () => {
@@ -91,41 +156,120 @@ const QuizScreen = ({ bank, onBack }) => {
   // ---------- 获取选项样式 ----------
   const getOptionStyle = (index) => {
     if (!showResult) {
-      return selectedIndex === index ? { backgroundColor: '#d3d3d3' } : {};
+      if (selectedIndices.includes(index)) {
+        return { backgroundColor: '#d3d3d3' };
+      }
+      return {};
     }
-    if (index === currentQ.correct) {
-      return { backgroundColor: '#4CAF50' };
+    const isInCorrect = currentQ.correct.includes(index);
+    const isSelected = selectedIndices.includes(index);
+
+    if (isMulti) {
+      if (isSelected && isInCorrect) {
+        return { backgroundColor: '#4CAF50' };
+      }
+      if (isSelected && !isInCorrect) {
+        return { backgroundColor: '#f44336' };
+      }
+      return {};
+    } else {
+      // 单选/判断
+      if (isInCorrect) {
+        return { backgroundColor: '#4CAF50' };
+      }
+      if (isSelected && !isInCorrect) {
+        return { backgroundColor: '#f44336' };
+      }
+      return {};
     }
-    if (index === selectedIndex && !isCorrect) {
-      return { backgroundColor: '#f44336' };
-    }
-    return {};
   };
 
+  // 渲染目录项
+  const renderCatalogItem = ({ item }) => {
+    const idx = item - 1;
+    const record = allRecords[idx];
+    let bgColor = '#fff';
+    let textColor = '#333';
+    if (record) {
+      if (record.correct) {
+        bgColor = '#4CAF50';
+        textColor = '#fff';
+      } else {
+        bgColor = '#f44336';
+        textColor = '#fff';
+      }
+    }
+    return (
+      <TouchableOpacity
+        style={{
+          width: '18%',
+          aspectRatio: 1,
+          margin: '1%',
+          backgroundColor: bgColor,
+          borderRadius: 8,
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: '#ddd',
+        }}
+        onPress={() => goToQuestion(idx)}
+      >
+        <Text style={{ color: textColor, fontWeight: 'bold', fontSize: 16 }}>{item}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // 正确答案字母串
+  const correctLetters = currentQ.correct.map(i => String.fromCharCode(65 + i)).join('');
+
+  // ---------- 主界面 ----------
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={onBack} style={{ alignSelf: 'flex-start', marginBottom: 10 }}>
-        <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回模式选择</Text>
-      </TouchableOpacity>
+      {/* 顶部导航 */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <TouchableOpacity onPress={onBack}>
+          <Text style={{ fontSize: 18, color: '#2196F3' }}>‹ 返回</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowCatalog(true)}>
+          <Text style={{ fontSize: 18, color: '#2196F3', fontWeight: 'bold' }}>📋 目录</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.title}>{name} - {currentIndex + 1}/{questions.length}</Text>
-      <Text style={styles.title}>{currentQ.title}</Text>
+      <Text style={styles.title}>
+        {currentQ.type}：{currentQ.title}
+      </Text>
 
       {currentQ.options.map((option, idx) => (
         <TouchableOpacity
           key={idx}
-          style={[
-            styles.optionButton,
-            getOptionStyle(idx),
-            showResult && idx !== currentQ.correct && idx !== selectedIndex && { opacity: 0.6 },
-          ]}
-          onPress={() => handlePress(idx)}
+          style={[styles.optionButton, getOptionStyle(idx)]}
+          onPress={() => {
+            if (isMulti) {
+              handleMultiPress(idx);
+            } else {
+              handleSinglePress(idx);
+            }
+          }}
           disabled={showResult}
         >
-          <Text style={styles.optionText}>{option}</Text>
+          <Text style={styles.optionText}>
+            {String.fromCharCode(65 + idx)}. {option}
+          </Text>
         </TouchableOpacity>
       ))}
 
+      {/* 多选题提交按钮 */}
+      {isMulti && !showResult && (
+        <TouchableOpacity
+          style={[styles.optionButton, { marginTop: 10, backgroundColor: '#2196F3' }]}
+          onPress={handleSubmitMulti}
+        >
+          <Text style={[styles.optionText, { color: '#fff', textAlign: 'center' }]}>确认答案</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 上一题/下一题 */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
         <TouchableOpacity
           style={[styles.optionButton, { flex: 1, marginRight: 8, backgroundColor: currentIndex > 0 ? '#2196F3' : '#ccc' }]}
@@ -144,6 +288,53 @@ const QuizScreen = ({ bank, onBack }) => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* 解析 + 正确答案 */}
+      {showResult && (
+        <View style={{
+          marginTop: 15,
+          padding: 12,
+          backgroundColor: '#fff3e0',
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: '#ffb74d'
+        }}>
+          <Text style={{ fontWeight: 'bold', color: '#e65100' }}>正确答案：{correctLetters}</Text>
+          {currentQ.parse && currentQ.parse.trim() !== '' && (
+            <Text style={{ fontSize: 16, color: '#333', marginTop: 4 }}>解析：{currentQ.parse}</Text>
+          )}
+        </View>
+      )}
+
+      {/* 目录弹窗 */}
+      <Modal
+        visible={showCatalog}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCatalog(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { maxHeight: '70%', width: '90%' }]}>
+            <Text style={styles.modalTitle}>📖 题目列表</Text>
+            <Text style={{ textAlign: 'center', marginBottom: 10, color: '#666' }}>
+              🟢 正确 &nbsp;|&nbsp; 🔴 错误 &nbsp;|&nbsp; ⬜ 未做
+            </Text>
+            <FlatList
+              data={Array.from({ length: questions.length }, (_, i) => i + 1)}
+              keyExtractor={(item) => item.toString()}
+              numColumns={5}
+              renderItem={renderCatalogItem}
+              contentContainerStyle={{ paddingVertical: 10 }}
+            />
+            <TouchableOpacity
+              onPress={() => setShowCatalog(false)}
+              style={{ marginTop: 10, padding: 12, backgroundColor: '#2196F3', borderRadius: 8 }}
+            >
+              <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold' }}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
